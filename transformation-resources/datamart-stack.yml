@@ -1,0 +1,179 @@
+AWSTemplateFormatVersion: 2010-09-09
+Description: HIP - DataLake - Dashboard - Common Resources
+
+Parameters:
+  ProjectName:
+    Type: String
+
+  Env:
+    Type: String
+
+  DataLakeGlueRoleArn:
+    Type: String
+
+  DataLakeDatabaseName:
+    Type: String
+
+  LandingBucketName:
+    Type: String
+
+  RawBucketName:
+    Type: String
+
+  StdBucketName:
+    Type: String
+  
+  SQLCombineCron:
+    Type: String
+  
+  SQLCrawlCron:
+    Type: String
+
+Resources:
+
+  SQLScheduledRule: 
+    Type: AWS::Events::Rule
+    Properties: 
+      Description: "Cron trigger for dashboard SQL update"
+      ScheduleExpression: !Ref SQLCombineCron
+      State: "ENABLED"
+      Targets: 
+        - Arn: !GetAtt SQLLambda.Arn
+          Id: SARDashSQLLambda
+          Input: '{"query_type": "marketo_bu", "query_config": "SAR", "output_path": "marketo/b2b_stats", "truncate": "False"}'
+        - Arn: !GetAtt SQLLambda.Arn
+          Id: ASDashSQLLambda
+          Input: '{"query_type": "marketo_bu", "query_config": "AS", "output_path": "marketo/b2c_stats", "truncate": "False"}'
+
+  SQLCombineRule: 
+    Type: AWS::Events::Rule
+    Properties: 
+      Description: "Cron trigger for dashboard SQL update"
+      ScheduleExpression: !Ref SQLCombineCron
+      State: "ENABLED"
+      Targets: 
+        - Arn: !GetAtt SQLLambda.Arn
+          Id: CombineSQLDashLambda
+          Input: '{"query_type": "pbi_combine", "output_path": "pbi_combine", "truncate": "True"}'
+        - Arn: !GetAtt SQLLambda.Arn
+          Id: GlobalDashLambda
+          Input: '{"query_type": "marketo_global", "output_path": "marketo/global_stats", "truncate": "False"}'
+
+  LambdaPermissionForSQLScheduledRule: 
+    Type: AWS::Lambda::Permission
+    Properties: 
+      FunctionName: !Ref SQLLambda
+      Action: "lambda:InvokeFunction"
+      Principal: "events.amazonaws.com"
+      SourceArn: !GetAtt SQLScheduledRule.Arn
+
+  LambdaPermissionForSQLCombineRule: 
+    Type: AWS::Lambda::Permission
+    Properties: 
+      FunctionName: !Ref SQLLambda
+      Action: "lambda:InvokeFunction"
+      Principal: "events.amazonaws.com"
+      SourceArn: !GetAtt SQLCombineRule.Arn
+
+  SQLLambdaGlueRole:
+    Type: AWS::IAM::Role
+    Properties:
+      AssumeRolePolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+          - Effect: Allow
+            Principal:
+              Service:
+                - lambda.amazonaws.com
+            Action:
+              - sts:AssumeRole
+      Policies:
+        - PolicyName: root
+          PolicyDocument:
+            Version: 2012-10-17
+            Statement:
+              - Effect: Allow
+                Action:
+                  - "s3:*"
+                Resource:
+                  - !Sub "arn:aws:s3:::${RawBucketName}/google-analytics/*"
+                  - !Sub "arn:aws:s3:::${RawBucketName}/marketo/*"
+                  - !Sub "arn:aws:s3:::${RawBucketName}/reference/*"
+                  - !Sub "arn:aws:s3:::${StdBucketName}/dashboard/*"
+                  - !Sub "arn:aws:s3:::${ProjectName}-${Env}-lambda-resources/sql/*"
+              - Effect: Allow
+                Action:
+                  - "s3:ListObjects"
+                Resource:
+                  - !Sub "arn:aws:s3:::${StdBucketName}"
+      ManagedPolicyArns:
+        - arn:aws:iam::aws:policy/service-role/AWSLambdaBasicExecutionRole
+        - arn:aws:iam::aws:policy/AmazonAthenaFullAccess
+      Path: "/"
+
+  SQLLambda:
+    Type: AWS::Lambda::Function
+    Properties:
+      Code: 
+          S3Bucket: "hip-datalake-dev-lambda-resources"
+          S3Key: "python-code/dashboard-sql.zip"
+      Description: Perform SQL queries stored in python-code folder of Lambda bucket
+      FunctionName: !Sub "${ProjectName}-${Env}-dashboard-sql"
+      Handler: lambda_function.lambda_handler
+      MemorySize: 256
+      Role: !GetAtt SQLLambdaGlueRole.Arn
+      Runtime: python3.9
+      Tags: 
+        - Key: "ProjectName"
+          Value: !Ref ProjectName
+        - Key: "Env"
+          Value: !Ref Env
+      Timeout: 180
+
+
+
+  BUMappingTable:
+    Type: AWS::Glue::Table
+    Properties: 
+      CatalogId: !Ref AWS::AccountId
+      DatabaseName: !Ref DataLakeDatabaseName
+      TableInput:
+        Name: bu_mapping
+        StorageDescriptor:
+          Columns: 
+            -   Name: bu
+                Type: string
+            -   Name: type
+                Type: string
+            -   Name: value
+                Type: string
+          Compressed: False
+          Location: !Sub "s3://${RawBucketName}/reference/"
+          InputFormat: org.apache.hadoop.hive.ql.io.parquet.MapredParquetInputFormat
+          OutputFormat: org.apache.hadoop.hive.ql.io.parquet.MapredParquetOutputFormat
+          SerdeInfo:
+            SerializationLibrary: org.apache.hadoop.hive.ql.io.parquet.serde.ParquetHiveSerDe
+            Parameters:
+              serialization.format: '1'
+        TableType: "EXTERNAL_TABLE"
+
+  StdDashCrawler:
+    Type: AWS::Glue::Crawler
+    Properties:
+      Name: !Sub "${ProjectName}_${Env}_dashboard_data"
+      Role: !Ref DataLakeGlueRoleArn
+      DatabaseName: !Ref DataLakeDatabaseName
+      Targets:
+        S3Targets:
+          - Path: !Sub "s3://${StdBucketName}/dashboard/"
+            Exclusions:
+            - "**metadata"
+      SchemaChangePolicy:
+        UpdateBehavior: "UPDATE_IN_DATABASE"
+        DeleteBehavior: "LOG"
+      Schedule:
+        ScheduleExpression: !Ref SQLCrawlCron
+      TablePrefix: "dashboard_"
+      Tags: 
+        "ProjectName": !Ref ProjectName
+        "Env": !Ref Env

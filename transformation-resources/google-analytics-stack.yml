@@ -1,0 +1,204 @@
+AWSTemplateFormatVersion: 2010-09-09
+Description: DataLake - Google Analytics - Glue Jobs
+
+Parameters:
+  ProjectName:
+    Type: String
+
+  Env:
+    Type: String
+
+  DataLakeGlueRoleArn:
+    Type: String
+
+  DataLakeDatabaseName:
+    Type: String
+  
+  LandingBucketName:
+    Type: String
+
+  RawBucketName:
+    Type: String
+
+  RawDataCrawlCron:
+    Type: String
+
+  RawDataCollectCron:
+    Type: String
+
+Resources:
+  GetBatchFormsRule: 
+    Type: AWS::Events::Rule
+    Properties: 
+      Description: "Cron trigger for Google Analytics forms Query"
+      ScheduleExpression: !Ref RawDataCollectCron
+      State: "ENABLED"
+      Targets: 
+        - Arn: !GetAtt GetBatchFormsLambda.Arn
+          Id: GetBatchFormsLambdaB2B
+          Input: '{"pview_id" : "92320289" "api_request": "segments_B2B.json"}'
+        - Arn: !GetAtt GetBatchFormsLambda.Arn
+          Id: GetBatchFormsLambdaB2C
+          Input: '{"pview_id" : "92320289", "api_request": "segments_B2C.json"}'
+
+  GetBatchStatsRule: 
+    Type: AWS::Events::Rule
+    Properties: 
+      Description: "Cron trigger for Google Analytics stats Query"
+      ScheduleExpression: !Ref RawDataCollectCron
+      State: "ENABLED"
+      Targets: 
+        - Arn: !GetAtt GetBatchStatsLambda.Arn
+          Id: GetBatchLeadsLambdaB2B
+          Input: '{"pview_id" : "#########", "api_request": "segments_B2B.json"}'
+        - Arn: !GetAtt GetBatchStatsLambda.Arn
+          Id: GetBatchLeadsLambdaB2C
+          Input: '{"pview_id" : "#########", "api_request": "segments_B2C.json"}'
+
+  LambdaPermissionForGetBatchFormsRule: 
+    Type: AWS::Lambda::Permission
+    Properties: 
+      FunctionName: !Ref GetBatchFormsLambda
+      Action: "lambda:InvokeFunction"
+      Principal: "events.amazonaws.com"
+      SourceArn: !GetAtt GetBatchFormsRule.Arn
+  
+  LambdaPermissionForGetBatchStatsRule: 
+    Type: AWS::Lambda::Permission
+    Properties: 
+      FunctionName: !Ref GetBatchStatsLambda
+      Action: "lambda:InvokeFunction"
+      Principal: "events.amazonaws.com"
+      SourceArn: !GetAtt GetBatchStatsRule.Arn
+
+  GetBatchFormsLambdaGlueRole:
+    Type: AWS::IAM::Role
+    Properties:
+      AssumeRolePolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+          - Effect: Allow
+            Principal:
+              Service:
+                - lambda.amazonaws.com
+            Action:
+              - sts:AssumeRole
+      Policies:
+        - PolicyName: S3Write
+          PolicyDocument:
+            Version: 2012-10-17
+            Statement:
+              - Effect: Allow
+                Action:
+                  - "s3:*"
+                Resource:
+                  - !Sub "arn:aws:s3:::${RawBucketName}/google-analytics/forms/*"
+      ManagedPolicyArns:
+        - arn:aws:iam::aws:policy/service-role/AWSLambdaBasicExecutionRole
+      Path: "/"
+
+  GetBatchStatsLambdaGlueRole:
+    Type: AWS::IAM::Role
+    Properties:
+      AssumeRolePolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+          - Effect: Allow
+            Principal:
+              Service:
+                - lambda.amazonaws.com
+            Action:
+              - sts:AssumeRole
+      Policies:
+        - PolicyName: S3Write
+          PolicyDocument:
+            Version: 2012-10-17
+            Statement:
+              - Effect: Allow
+                Action:
+                  - "s3:*"
+                Resource:
+                  - !Sub "arn:aws:s3:::${RawBucketName}/google-analytics/stats/*"
+      ManagedPolicyArns:
+        - arn:aws:iam::aws:policy/service-role/AWSLambdaBasicExecutionRole
+      Path: "/"
+
+  GetBatchFormsLambda:
+    Type: AWS::Lambda::Function
+    Properties:
+      Code: 
+          S3Bucket: !Sub "${ProjectName}-${Env}-lambda-resources"
+          S3Key: "python-code/google-analytics-api-forms.zip"
+      Description: Get Google Analytics Form data and save to parquet files for raw bucket
+      FunctionName: !Sub "${ProjectName}-${Env}-ga-forms-parquet"
+      Handler: lambda_function.lambda_handler
+      Layers: 
+        - arn:aws:lambda:eu-west-1:336392948345::layer:AWSDataWrangler-Python39:1
+      Environment:
+      MemorySize: 256
+      Role: !GetAtt GetBatchFormsLambdaGlueRole.Arn
+      Runtime: python3.9
+      Tags: 
+        - Key: "ProjectName"
+          Value: !Ref ProjectName
+        - Key: "Env"
+          Value: !Ref Env
+      Timeout: 180
+
+  GetBatchStatsLambda:
+    Type: AWS::Lambda::Function
+    Properties:
+      Code: 
+          S3Bucket: !Sub "${ProjectName}-${Env}-lambda-resources"
+          S3Key: "python-code/google-analytics-api-stats.zip"
+      Description: Get Google Analytics Stats data and save to parquet files for raw bucket
+      FunctionName: !Sub "${ProjectName}-${Env}-ga-stats-parquet"
+      Handler: lambda_function.lambda_handler
+      Layers: 
+        - arn:aws:lambda:eu-west-1:336392948345:layer:AWSDataWrangler-Python39:1
+      Role: !GetAtt GetBatchStatsLambdaGlueRole.Arn
+      Runtime: python3.9
+      Tags:
+        - Key: "ProjectName"
+          Value: !Ref ProjectName
+        - Key: "Env"
+          Value: !Ref Env
+      Timeout: 900
+
+  GAStatsCrawler:
+    Type: AWS::Glue::Crawler
+    Properties:
+      Name: !Sub "${ProjectName}_${Env}_google_analytics_stats"
+      Role: !Ref DataLakeGlueRoleArn
+      DatabaseName: !Ref DataLakeDatabaseName
+      Targets:
+        S3Targets:
+          - Path: !Sub "s3://${RawBucketName}/google-analytics/stats/"
+      SchemaChangePolicy:
+        UpdateBehavior: "UPDATE_IN_DATABASE"
+        DeleteBehavior: "LOG"
+      Schedule:
+        ScheduleExpression: !Ref RawDataCrawlCron
+      TablePrefix: "google-analytics-"
+      Tags: 
+        "ProjectName": !Ref ProjectName
+        "Env": !Ref Env
+  
+  GAFormsCrawler:
+    Type: AWS::Glue::Crawler
+    Properties:
+      Name: !Sub "${ProjectName}_${Env}_google_analytics_forms"
+      Role: !Ref DataLakeGlueRoleArn
+      DatabaseName: !Ref DataLakeDatabaseName
+      Targets:
+        S3Targets:
+          - Path: !Sub "s3://${RawBucketName}/google-analytics/forms/"
+      SchemaChangePolicy:
+        UpdateBehavior: "UPDATE_IN_DATABASE"
+        DeleteBehavior: "LOG"
+      Schedule:
+        ScheduleExpression: !Ref RawDataCrawlCron
+      TablePrefix: "google-analytics-"
+      Tags: 
+        "ProjectName": !Ref ProjectName
+        "Env": !Ref Env

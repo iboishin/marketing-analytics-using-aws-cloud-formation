@@ -1,0 +1,61 @@
+AWSTemplateFormatVersion: 2010-09-09
+Description: DataLake - Athena Stack
+
+Parameters:
+  ProjectName:
+    Type: String
+
+  Env:
+    Type: String
+
+Resources:
+  AthenaOuputDataBucket:
+    Type: AWS::S3::Bucket
+    Properties:
+      BucketName: !Sub "${ProjectName}-${Env}-athena-output"
+      AccessControl: Private
+      PublicAccessBlockConfiguration:
+        BlockPublicAcls: true
+        BlockPublicPolicy: true
+        IgnorePublicAcls: true
+        RestrictPublicBuckets: true
+      LifecycleConfiguration:
+        Rules:
+          - Id: DeleteRule
+            Status: Enabled
+            ExpirationInDays: 1
+      BucketEncryption:
+        ServerSideEncryptionConfiguration:
+          - ServerSideEncryptionByDefault:
+              SSEAlgorithm: AES256
+      Tags:
+        - Key: ProjectName
+          Value: !Ref ProjectName
+        - Key: Env
+          Value: !Ref Env
+
+  DataLakeAthenaWorkGroup:
+    Type: AWS::Athena::WorkGroup
+    Properties:
+      Name: !Sub "${ProjectName}-${Env}-workgroup"
+      Description: !Sub "DataLake Workgroup (Env: ${Env})"
+      State: ENABLED
+      WorkGroupConfiguration:
+        BytesScannedCutoffPerQuery: 200000000
+        EnforceWorkGroupConfiguration: false
+        PublishCloudWatchMetricsEnabled: false
+        RequesterPaysEnabled: true
+        ResultConfiguration:
+          OutputLocation: !Sub "s3://${AthenaOuputDataBucket}"
+      Tags:
+        - Key: ProjectName
+          Value: !Ref ProjectName
+        - Key: Env
+          Value: !Ref Env
+
+Outputs:
+  AthenaOuputDataBucketName:
+    Value: !Ref AthenaOuputDataBucket
+
+  DataLakeAthenaWorkGroup:
+    Value: !Ref DataLakeAthenaWorkGroup
