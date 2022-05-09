@@ -1,5 +1,5 @@
 AWSTemplateFormatVersion: 2010-09-09
-Description: HIP - DataLake - Dashboard - Common Resources
+Description: DataLake - Dashboard - Common Resources
 
 Parameters:
   ProjectName:
@@ -115,7 +115,7 @@ Resources:
     Type: AWS::Lambda::Function
     Properties:
       Code: 
-          S3Bucket: "hip-datalake-dev-lambda-resources"
+          S3Bucket: "datalake-dev-lambda-resources"
           S3Key: "python-code/dashboard-sql.zip"
       Description: Perform SQL queries stored in python-code folder of Lambda bucket
       FunctionName: !Sub "${ProjectName}-${Env}-dashboard-sql"
