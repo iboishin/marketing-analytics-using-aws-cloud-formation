@@ -1,3 +1,6 @@
+
+import os
+import ast
 import pandas as pd
 import pyarrow as pa
 import pyarrow.parquet as pq
@@ -8,14 +11,16 @@ from apiclient.discovery import build
 from oauth2client.service_account import ServiceAccountCredentials
 
 s3 = boto3.client('s3')
-
+ssm = boto3.client('ssm')
 
 scope = ['https://www.googleapis.com/auth/analytics.readonly']
-gcp_service_account_key = 'secrets/aws-ga-lambda-cred.json'
-output_bucket = "datalake-dev-raw"
+gcp_service_account_key_path = os.environ['GCP_SERVICE_ACCOUNT_KEY']
+gcp_service_account_key_dict = ast.literal_eval(ssm.get_parameter(Name=gcp_service_account_key_path, WithDecryption=True)['Parameter']['Value'])
+
+output_bucket = os.environ['OUTPUT_BUCKET']
 
 def initialize_analyticsreporting():
-    credentials = ServiceAccountCredentials.from_json_keyfile_name(gcp_service_account_key, scope)
+    credentials = ServiceAccountCredentials.from_json_keyfile_dict(gcp_service_account_key_dict, scope)
     analytics = build('analyticsreporting', 'v4', credentials=credentials, cache_discovery=False)
     return analytics
     
@@ -72,7 +77,7 @@ def get_report(analytics, view_id, dt):
                                         'dimensionFilter': {
                                         'dimensionName': "ga:country",
                                         'operator': "EXACT",
-                                        'expressions': ["Denmark"],
+                                        'expressions': ["Spain"],
                                         },
                                     },
                                     ],
@@ -128,7 +133,7 @@ def get_report(analytics, view_id, dt):
                                         'dimensionFilter': {
                                         'dimensionName': "ga:country",
                                         'operator': "EXACT",
-                                        'expressions': ["Denmark"],
+                                        'expressions': ["Spain"],
                                         },
                                     },
                                     ],

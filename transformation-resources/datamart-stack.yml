@@ -14,9 +14,6 @@ Parameters:
   DataLakeDatabaseName:
     Type: String
 
-  LandingBucketName:
-    Type: String
-
   RawBucketName:
     Type: String
 
@@ -40,10 +37,10 @@ Resources:
       Targets: 
         - Arn: !GetAtt SQLLambda.Arn
           Id: SARDashSQLLambda
-          Input: '{"query_type": "marketo_bu", "query_config": "SAR", "output_path": "marketo/b2b_stats", "truncate": "False"}'
+          Input: '{"query_type": "marketo_bu", "query_config": "B2B", "output_path": "marketo/b2b_stats", "truncate": "False"}'
         - Arn: !GetAtt SQLLambda.Arn
           Id: ASDashSQLLambda
-          Input: '{"query_type": "marketo_bu", "query_config": "AS", "output_path": "marketo/b2c_stats", "truncate": "False"}'
+          Input: '{"query_type": "marketo_bu", "query_config": "B2C", "output_path": "marketo/b2c_stats", "truncate": "False"}'
 
   SQLCombineRule: 
     Type: AWS::Events::Rule
@@ -115,8 +112,8 @@ Resources:
     Type: AWS::Lambda::Function
     Properties:
       Code: 
-          S3Bucket: "datalake-dev-lambda-resources"
-          S3Key: "python-code/dashboard-sql.zip"
+          S3Bucket: !Sub "${ProjectName}-${Env}-lambda-resources-${AWS::AccountId}-${AWS::Region}"
+          S3Key: "python/dashboard-sql.zip"
       Description: Perform SQL queries stored in python-code folder of Lambda bucket
       FunctionName: !Sub "${ProjectName}-${Env}-dashboard-sql"
       Handler: lambda_function.lambda_handler
@@ -129,8 +126,6 @@ Resources:
         - Key: "Env"
           Value: !Ref Env
       Timeout: 180
-
-
 
   BUMappingTable:
     Type: AWS::Glue::Table

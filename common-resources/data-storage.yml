@@ -9,7 +9,7 @@ Parameters:
     Type: String
 
 Resources:
-  LandingBucket:
+  RawBucket:
     Type: AWS::S3::Bucket
     Properties:
       BucketName: !Sub "${ProjectName}-${Env}-raw-${AWS::AccountId}-${AWS::Region}"
@@ -34,10 +34,33 @@ Resources:
         - Key: Env
           Value: !Ref Env
   
+  StdBucket:
+    Type: AWS::S3::Bucket
+    Properties:
+      BucketName: !Sub "${ProjectName}-${Env}-standardized-${AWS::AccountId}-${AWS::Region}"
+      AccessControl: Private
+      PublicAccessBlockConfiguration:
+        BlockPublicAcls: true
+        BlockPublicPolicy: true
+        IgnorePublicAcls: true
+        RestrictPublicBuckets: true
+      BucketEncryption:
+        ServerSideEncryptionConfiguration:
+          - ServerSideEncryptionByDefault:
+              SSEAlgorithm: AES256
+      Tags:
+        - Key: ProjectName
+          Value: !Ref ProjectName
+        - Key: Env
+          Value: !Ref Env
+      VersioningConfiguration:
+        Status: Enabled
+
+
   LambdaBucket:
     Type: AWS::S3::Bucket
     Properties:
-      BucketName: !Sub "${ProjectName}-${Env}-lambda-resources"
+      BucketName: !Sub "${ProjectName}-${Env}-lambda-resources-${AWS::AccountId}-${AWS::Region}"
       AccessControl: Private
       PublicAccessBlockConfiguration:
         BlockPublicAcls: true

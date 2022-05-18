@@ -14,7 +14,7 @@ Parameters:
   DataLakeDatabaseName:
     Type: String
   
-  LandingBucketName:
+  GCPServiceAccountKey:
     Type: String
 
   RawBucketName:
@@ -36,10 +36,7 @@ Resources:
       Targets: 
         - Arn: !GetAtt GetBatchFormsLambda.Arn
           Id: GetBatchFormsLambdaB2B
-          Input: '{"pview_id" : "92320289" "api_request": "segments_B2B.json"}'
-        - Arn: !GetAtt GetBatchFormsLambda.Arn
-          Id: GetBatchFormsLambdaB2C
-          Input: '{"pview_id" : "92320289", "api_request": "segments_B2C.json"}'
+          Input: '{"pview_id" : "147595912"}'
 
   GetBatchStatsRule: 
     Type: AWS::Events::Rule
@@ -50,10 +47,7 @@ Resources:
       Targets: 
         - Arn: !GetAtt GetBatchStatsLambda.Arn
           Id: GetBatchLeadsLambdaB2B
-          Input: '{"pview_id" : "#########", "api_request": "segments_B2B.json"}'
-        - Arn: !GetAtt GetBatchStatsLambda.Arn
-          Id: GetBatchLeadsLambdaB2C
-          Input: '{"pview_id" : "#########", "api_request": "segments_B2C.json"}'
+          Input: '{"pview_id" : 147595912}'
 
   LambdaPermissionForGetBatchFormsRule: 
     Type: AWS::Lambda::Permission
@@ -127,14 +121,17 @@ Resources:
     Type: AWS::Lambda::Function
     Properties:
       Code: 
-          S3Bucket: !Sub "${ProjectName}-${Env}-lambda-resources"
-          S3Key: "python-code/google-analytics-api-forms.zip"
+          S3Bucket: !Sub "${ProjectName}-${Env}-lambda-resources-${AWS::AccountId}-${AWS::Region}"
+          S3Key: "python/google-analytics-forms.zip"
       Description: Get Google Analytics Form data and save to parquet files for raw bucket
       FunctionName: !Sub "${ProjectName}-${Env}-ga-forms-parquet"
       Handler: lambda_function.lambda_handler
       Layers: 
-        - arn:aws:lambda:eu-west-1:336392948345::layer:AWSDataWrangler-Python39:1
+        - !Sub arn:aws:lambda:${AWS::Region}:336392948345:layer:AWSDataWrangler-Python39:5
       Environment:
+        Variables:
+          GCP_SERVICE_ACCOUNT_KEY : !Ref GCPServiceAccountKey
+          OUTPUT_BUCKET: !Ref RawBucketName
       MemorySize: 256
       Role: !GetAtt GetBatchFormsLambdaGlueRole.Arn
       Runtime: python3.9
@@ -149,13 +146,17 @@ Resources:
     Type: AWS::Lambda::Function
     Properties:
       Code: 
-          S3Bucket: !Sub "${ProjectName}-${Env}-lambda-resources"
-          S3Key: "python-code/google-analytics-api-stats.zip"
+          S3Bucket: !Sub "${ProjectName}-${Env}-lambda-resources-${AWS::AccountId}-${AWS::Region}"
+          S3Key: "python/google-analytics-stats.zip"
       Description: Get Google Analytics Stats data and save to parquet files for raw bucket
       FunctionName: !Sub "${ProjectName}-${Env}-ga-stats-parquet"
       Handler: lambda_function.lambda_handler
       Layers: 
-        - arn:aws:lambda:eu-west-1:336392948345:layer:AWSDataWrangler-Python39:1
+        - !Sub arn:aws:lambda:${AWS::Region}:336392948345:layer:AWSDataWrangler-Python39:5
+      Environment:
+        Variables:
+          GCP_SERVICE_ACCOUNT_KEY : !Ref GCPServiceAccountKey
+          OUTPUT_BUCKET: !Ref RawBucketName
       Role: !GetAtt GetBatchStatsLambdaGlueRole.Arn
       Runtime: python3.9
       Tags:

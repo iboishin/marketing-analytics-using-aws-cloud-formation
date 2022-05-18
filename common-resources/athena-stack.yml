@@ -12,7 +12,7 @@ Resources:
   AthenaOuputDataBucket:
     Type: AWS::S3::Bucket
     Properties:
-      BucketName: !Sub "${ProjectName}-${Env}-athena-output"
+      BucketName: !Sub "${ProjectName}-${Env}-athena-output-${AWS::AccountId}-${AWS::Region}"
       AccessControl: Private
       PublicAccessBlockConfiguration:
         BlockPublicAcls: true
