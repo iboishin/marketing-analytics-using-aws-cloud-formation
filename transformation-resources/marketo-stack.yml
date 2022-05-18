@@ -1,0 +1,259 @@
+AWSTemplateFormatVersion: 2010-09-09
+Description: DataLake - Marketo - Glue Jobs
+
+Parameters:
+  ProjectName:
+    Type: String
+
+  Env:
+    Type: String
+
+  DataLakeGlueRoleArn:
+    Type: String
+
+  DataLakeDatabaseName:
+    Type: String
+
+  RawBucketName:
+    Type: String
+
+  RawDataCollectCron:
+    Type: String
+
+  RawDataCrawlCron:
+    Type: String
+
+  MunchkinID:
+    Type: String
+
+  ClientID:
+    Type: String
+
+  ClientSecret:
+    Type: String
+
+Resources:
+  GetBatchActivityRule: 
+    Type: AWS::Events::Rule
+    Properties: 
+      Description: "Cron trigger for Marketo REST API Activity Query"
+      ScheduleExpression: !Ref RawDataCollectCron
+      State: "ENABLED"
+      Targets: 
+        - Arn: !GetAtt GetBatchActivityLambda.Arn
+          Id: MarketoGetBatchActivityLambda
+          Input: '{"list_activity_ids" : ["2", "12", "21", "22", "34", "36", "100001"]}'
+
+  GetBatchLeadsRule: 
+    Type: AWS::Events::Rule
+    Properties: 
+      Description: "Cron trigger for Marketo REST API Leads Query"
+      ScheduleExpression: !Ref RawDataCollectCron
+      State: "ENABLED"
+      Targets: 
+        - Arn: !GetAtt GetBatchLeadsLambda.Arn
+          Id : MarketoGetBatchLeadsLambda
+
+  LambdaPermissionForGetBatchActivityRule: 
+    Type: AWS::Lambda::Permission
+    Properties: 
+      FunctionName: !Ref GetBatchActivityLambda
+      Action: "lambda:InvokeFunction"
+      Principal: "events.amazonaws.com"
+      SourceArn: !GetAtt GetBatchActivityRule.Arn
+  
+  LambdaPermissionForGetBatchLeadsRule: 
+    Type: AWS::Lambda::Permission
+    Properties: 
+      FunctionName: !Ref GetBatchLeadsLambda
+      Action: "lambda:InvokeFunction"
+      Principal: "events.amazonaws.com"
+      SourceArn: !GetAtt GetBatchLeadsRule.Arn
+
+  GetBatchActivityLambdaGlueRole:
+    Type: AWS::IAM::Role
+    Properties:
+      AssumeRolePolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+          - Effect: Allow
+            Principal:
+              Service:
+                - lambda.amazonaws.com
+            Action:
+              - sts:AssumeRole
+      Policies:
+        - PolicyName: S3Write
+          PolicyDocument:
+            Version: 2012-10-17
+            Statement:
+              - Effect: Allow
+                Action:
+                  - "s3:*"
+                Resource:
+                  - !Sub "arn:aws:s3:::${RawBucketName}/marketo/activity/*"
+        - PolicyName: SSMRead
+          PolicyDocument:
+            Version: 2012-10-17
+            Statement:
+              - Effect: Allow
+                Action:
+                  - "ssm:GetParameter"
+                  - "ssm:GetParameters"
+                  - "ssm:GetParametersByPath"
+                Resource:
+                  - !Sub "arn:aws:ssm:${AWS::Region}:${AWS::AccountId}:parameter${MunchkinID}"
+                  - !Sub "arn:aws:ssm:${AWS::Region}:${AWS::AccountId}:parameter${ClientID}"
+                  - !Sub "arn:aws:ssm:${AWS::Region}:${AWS::AccountId}:parameter${ClientSecret}"
+      ManagedPolicyArns:
+        - arn:aws:iam::aws:policy/service-role/AWSLambdaBasicExecutionRole
+      Path: "/"
+
+  GetBatchLeadsLambdaGlueRole:
+    Type: AWS::IAM::Role
+    Properties:
+      AssumeRolePolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+          - Effect: Allow
+            Principal:
+              Service:
+                - lambda.amazonaws.com
+            Action:
+              - sts:AssumeRole
+      Policies:
+        - PolicyName: S3Write
+          PolicyDocument:
+            Version: 2012-10-17
+            Statement:
+              - Effect: Allow
+                Action:
+                  - "s3:*"
+                Resource:
+                  - !Sub "arn:aws:s3:::${RawBucketName}/marketo/leads/*"
+        - PolicyName: SSMRead
+          PolicyDocument:
+            Version: 2012-10-17
+            Statement:
+              - Effect: Allow
+                Action:
+                  - "ssm:GetParameter"
+                  - "ssm:GetParameters"
+                  - "ssm:GetParametersByPath"
+                Resource:
+                  - !Sub "arn:aws:ssm:${AWS::Region}:${AWS::AccountId}:parameter${MunchkinID}"
+                  - !Sub "arn:aws:ssm:${AWS::Region}:${AWS::AccountId}:parameter${ClientID}"
+                  - !Sub "arn:aws:ssm:${AWS::Region}:${AWS::AccountId}:parameter${ClientSecret}"
+      ManagedPolicyArns:
+        - arn:aws:iam::aws:policy/service-role/AWSLambdaBasicExecutionRole
+      Path: "/"
+
+  GetBatchActivityLambda:
+    Type: AWS::Lambda::Function
+    Properties:
+      Code: 
+          S3Bucket: !Sub "${ProjectName}-${Env}-lambda-resources"
+          S3Key: "python-code/marketo-api-activity.zip"
+      Description: Get Marketo Activity data and save to parquet files for raw bucket
+      FunctionName: !Sub "${ProjectName}-${Env}-marketo-activity-parquet"
+      Handler: lambda_function.lambda_handler
+      Layers: 
+        - arn:aws:lambda:eu-west-1:336392948345::layer:AWSDataWrangler-Python39:1
+        - arn:aws:lambda:${AWS::Region}:${AWS::AccountId}:layer:datalake-dev-marketorestpython-layer:1
+      Environment:
+        Variables:
+          MUNCHKIN_ID: !Ref MunchkinID
+          CLIENT_ID: !Ref ClientID
+          CLIENT_SECRET: !Ref ClientSecret
+      MemorySize: 256
+      Role: !GetAtt GetBatchActivityLambdaGlueRole.Arn
+      Runtime: python3.9
+      Tags: 
+        - Key: "ProjectName"
+          Value: !Ref ProjectName
+        - Key: "Env"
+          Value: !Ref Env
+      Timeout: 180
+
+  GetBatchLeadsLambda:
+    Type: AWS::Lambda::Function
+    Properties:
+      Code: 
+          S3Bucket: !Sub "${ProjectName}-${Env}-lambda-resources"
+          S3Key: "python-code/marketo-api-leads.zip"
+      Description: Get Marketo Leads data and save to parquet files for raw bucket
+      FunctionName: !Sub "${ProjectName}-${Env}-marketo-leads-parquet"
+      Handler: lambda_function.lambda_handler
+      Layers: 
+        - arn:aws:lambda:eu-west-1:336392948345:layer:AWSDataWrangler-Python39:1
+        - arn:aws:lambda:${AWS::Region}:${AWS::AccountId}:layer:datalake-dev-marketorestpython-layer:1
+      Environment:
+        Variables:
+          MUNCHKIN_ID: !Ref MunchkinID
+          CLIENT_ID: !Ref ClientID
+          CLIENT_SECRET: !Ref ClientSecret
+      MemorySize: 256
+      Role: !GetAtt GetBatchLeadsLambdaGlueRole.Arn
+      Runtime: python3.9
+      Tags:
+        - Key: "ProjectName"
+          Value: !Ref ProjectName
+        - Key: "Env"
+          Value: !Ref Env
+      Timeout: 900
+
+  MarketoLeadsCrawler:
+    Type: AWS::Glue::Crawler
+    Properties:
+      Name: !Sub "${ProjectName}_${Env}_marketo_leads"
+      Role: !Ref DataLakeGlueRoleArn
+      DatabaseName: !Ref DataLakeDatabaseName
+      Targets:
+        S3Targets:
+          - Path: !Sub "s3://${RawBucketName}/marketo/leads/"
+      SchemaChangePolicy:
+        UpdateBehavior: "UPDATE_IN_DATABASE"
+        DeleteBehavior: "LOG"
+      Schedule:
+        ScheduleExpression: !Ref RawDataCrawlCron
+      TablePrefix: "marketo-"
+      Tags: 
+        "ProjectName": !Ref ProjectName
+        "Env": !Ref Env
+  
+  MarketoActivityCrawler:
+    Type: AWS::Glue::Crawler
+    Properties:
+      Name: !Sub "${ProjectName}_${Env}_marketo_activity"
+      Role: !Ref DataLakeGlueRoleArn
+      DatabaseName: !Ref DataLakeDatabaseName
+      Targets:
+        S3Targets:
+          - Path: !Sub "s3://${RawBucketName}/marketo/activity/"
+      SchemaChangePolicy:
+        UpdateBehavior: "UPDATE_IN_DATABASE"
+        DeleteBehavior: "LOG"
+      Schedule:
+        ScheduleExpression: !Ref RawDataCrawlCron
+      TablePrefix: "marketo-"
+      Tags:
+        "ProjectName": !Ref ProjectName
+        "Env": !Ref Env
+
+  MarketoOppCrawler:
+    Type: AWS::Glue::Crawler
+    Properties:
+      Name: !Sub "${ProjectName}_${Env}_marketo_opp_data"
+      Role: !Ref DataLakeGlueRoleArn
+      DatabaseName: !Ref DataLakeDatabaseName
+      Targets:
+        S3Targets:
+          - Path: !Sub "s3://${RawBucketName}/marketo_opp/"
+      SchemaChangePolicy:
+        UpdateBehavior: "UPDATE_IN_DATABASE"
+        DeleteBehavior: "LOG"
+      Schedule:
+        ScheduleExpression: !Ref RawDataCrawlCron
+      Tags:
+        "ProjectName": !Ref ProjectName
+        "Env": !Ref Env
