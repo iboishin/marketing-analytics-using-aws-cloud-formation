@@ -11,8 +11,7 @@ Tutorial on deploying AWS resources to query and collect Google Analytics and Ma
 
     **Reasoning**: The AppFlow connectors are not comprehensive (no segments for Google Analytics; no Activity Id filter for Marketo) and error prone (data flow fails randomly due to malformed responses).
 
-2. Final datamart launched on a schedule to create a table, instead of a view  
-    **Reasoning**: Provide code to query data using Athena API.
+2. Final datamart launched on a schedule to create a table using Athena API, instead of a view
 
     **Advantage**: For datamarts that will be queried often, for example a dashboard with many users, avoids high costs of running the query on the entirety of the underlying data.
     
@@ -25,8 +24,10 @@ Tutorial on deploying AWS resources to query and collect Google Analytics and Ma
      - If the dashboard is set to update the data upon demand in the dashboard, high costs will be avoided because each user will likely update the data in the dashboard at most once a day, at their convenience.  
 
 3. Cron vs S3 bucket notification to trigger Glue Crawler
-    - Marketo : Since all business units use the same Marketo Account, there will only be one marketo activity file and one marketo leads file for each data pipeline launch. As a result, the crawler can be launched as soon as the marketo lambdas are done processing.
-    - Google Analytics : Since each of the business units have a unique property view id in Google Analytics, there will be two seperate data transformation instances, making it impractical to launch the crawler after each transformation. For this reason, a cron schedule is used for the Glue Crawler.
+    - Marketo : S3 bucket notification
+        - Reasoning : Since all business units use the same Marketo Account, there will only be one marketo activity file and one marketo leads file for each data pipeline launch. As a result, the crawler can be launched as soon as the marketo lambdas are done processing.
+    - Google Analytics : Cron
+        - Reasoning : Since each of the business units have a unique property view id in Google Analytics, there will be two seperate data transformation instances and multiple file creations per day, making it impractical to launch the crawler after each transformation. For this reason, a cron schedule is used for the Glue Crawler.
 
 
 ## Deploiment process
