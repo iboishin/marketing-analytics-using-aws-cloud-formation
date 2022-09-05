@@ -40,7 +40,7 @@ Tutorial on deploying AWS resources to query and collect Google Analytics and Ma
 4. Select the orange *Create Stack* button.
 5. Keep the *Template is ready* option and select *Upload a template file*
 6. Upload the common-resources Cloud Formation stacks (i.e. the yml files). Fill in a unique stack name and the stack parameters (see below).
-7. Create a Marketo REST API Lambda layer (see below) and create a Lambda layer in AWS using the zip file with the name *${ProjectName}-${Env}-marketorestpython-layer*
+7. Create a Marketo REST API Lambda layer resource (see steps below) and create a Lambda layer in AWS using the zip file with the name *${ProjectName}-${Env}-marketorestpython-layer*
 8. Upload the transformation-resources Cloud Formation stacks (i.e. the yml files). Fill in a unique stack name and the stack parameters (see below).  
     *Note : Depending on your region, you might need to change the layer version for the AWS Data Wrangler layer.*
 
@@ -55,7 +55,7 @@ Tutorial on deploying AWS resources to query and collect Google Analytics and Ma
 - **DataLakeGlueRoleArn** : The Arn of your new Glue IAM role created by the glue-stack.yml CloudFormation stack. You can find this in the IAM service of AWS. Search for "glue" in *Roles*.
 - **GCPServiceAccountKey** : GCP credentials that allow the Lambda function to query the Google Analytics REST API. [Here's how to generate service account credentials from your GCP account](https://developers.google.com/identity/protocols/oauth2/service-account)
 - **RawBucketName** : The name of your new S3 bucket created by the data-storage.yml CloudFormation stack. Used to store raw data from APIs, that will later be used for the datamart.
-- **RawDataCollectCron** : The schedule at which you would like your pipeline to query your data sources. Example : *cron(00 01 * * ? *)*
+- **RawDataCollectCron** : The schedule at which you would like your pipeline to query your data sources. Example : _cron(00 01 * * ? *)_
     - [Here's a link to AWS documentation on crons](https://docs.aws.amazon.com/fr_fr/lambda/latest/dg/services-cloudwatchevents-expressions.html)
 - **RawDataCrawlCron** : The schedule at which you would like the Glue Crawler to crawl your S3 bucket and update your Athena tables. Depends on the time that you think is necessary to query the data. In our pipeline, the data collection should take at most 5 minutes. Thus, it would be safe to use a cron that is 15 mins after the *RawDataCollectCron* for example.
 - **StdBucketName** : The name of your new S3 bucket created by the data-storage.yml CloudFormation stack. Used to store transformed tables, used in dashboards.

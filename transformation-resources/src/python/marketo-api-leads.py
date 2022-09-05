@@ -43,16 +43,7 @@ def lambda_handler(event, context):
                                                 'leadStatus',
                                                 'SFDCType',
                                                 'createdAt',
-                                                'updatedAt',
-                                                'Scoring_ACR__c',
-                                                'Scoring_Altuglas__c',
-                                                'Scoring_Bostik_CC__c',
-                                                'Scoring_Bostik_IA__c',
-                                                'Scoring_Bostik_NW__c',
-                                                'Scoring_Coatex__c',
-                                                'Scoring_Sartomer__c',
-                                                'Scoring_TPA__c',
-                                                'Scoring_Thiochimie__c'
+                                                'updatedAt'
                                             ],
                                             filters= {'updatedAt': {'endAt': end_date, 'startAt': start_date}})
 
@@ -89,16 +80,7 @@ def lambda_handler(event, context):
         pa.field('leadStatus', pa.string()),
         pa.field('SFDCType', pa.string()),
         pa.field('createdAt', pa.string()),
-        pa.field('updatedAt', pa.string()),
-        pa.field('Scoring_ACR__c', pa.float64()),
-        pa.field('Scoring_Altuglas__c', pa.float64()),
-        pa.field('Scoring_Bostik_CC__c', pa.float64()),
-        pa.field('Scoring_Bostik_IA__c', pa.float64()),
-        pa.field('Scoring_Bostik_NW__c', pa.float64()),
-        pa.field('Scoring_Coatex__c', pa.float64()),
-        pa.field('Scoring_Sartomer__c', pa.float64()),
-        pa.field('Scoring_TPA__c', pa.float64()),
-        pa.field('Scoring_Thiochimie__c', pa.float64())
+        pa.field('updatedAt', pa.string())
     ]
     
     df_schema = pa.schema(fields)
